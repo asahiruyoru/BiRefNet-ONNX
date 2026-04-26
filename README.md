@@ -1,51 +1,75 @@
-# BiRefNet-ONNX-Sample
-DIS(Dichotomous Image Segmentation)モデルである[ZhengPeng7/BiRefNet](https://github.com/ZhengPeng7/BiRefNet)のPythonでのONNX推論サンプルです。<br>
-変換自体を試したい方は、Google Colaboratory上で[Convert2ONNX.ipynb](Convert2ONNX.ipynb)を使用ください。<br>
-> [!NOTE]
-> deform_conv2dをONNXへ変換するために[masamitsu-murase/deform_conv2d_onnx_exporter](https://github.com/masamitsu-murase/deform_conv2d_onnx_exporter)を利用しています。<br>
-> deform_conv2dはONNXでサポートされていないオペレーターのため、別のオペレーターで代替しています<br>
-> その結果、オリジナルモデルと比べ、推論速度や精度が劣る可能性があります
+# birefnet_onnx
 
-![image](https://github.com/user-attachments/assets/0317d3ea-16e0-4d64-87ff-57f8f98e3930)
+[BiRefNet](https://github.com/ZhengPeng7/BiRefNet)（高精度な前景/背景セグメンテーションモデル）の ONNX 版を、Gradio の Web UI から呼び出すだけのシンプルなツールです。
 
-# Requirement 
-* OpenCV 4.5.3.56 or later
-* onnxruntime 1.11.0 or later
-* tqdm 4.66.1 or later  # model/birefnet_1024x1024.onnx ファイルダウンロードを行う場合
+入力画像から **マスク / 前景（背景透過）/ 背景（前景透過）** の 3 種を生成します。
 
-# Convert
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Kazuhito00/BiRefNet-ONNX-Sample/blob/main/Convert2ONNX.ipynb)<br>
-Colaboratoryでノートブックを開き、上から順に実行してください。<br>
-※ハイメモリモード必須
+## 必要なもの
 
-# Demo
-デモの実行方法は以下です。
+- Python 3.10+
+- ONNX 実行環境（CPU だけでも動きます。GPU を使う場合は CUDA 対応版 onnxruntime）
+- BiRefNet の ONNX モデルファイル `birefnet_1024x1024.onnx`（**リポジトリには含めません**。後述の手順で用意）
+
+### 依存パッケージ
+
 ```bash
-python demo_onnx.py
+pip install opencv-python numpy gradio
+# CPU のみ
+pip install onnxruntime
+# GPU を使う場合（CUDA 対応 onnxruntime）
+pip install onnxruntime-gpu
 ```
-* --device<br>
-カメラデバイス番号の指定<br>
-デフォルト：0
-* --movie<br>
-動画ファイルの指定 ※指定時はカメラデバイスより優先<br>
-デフォルト：指定なし
-* --model<br>
-ロードするモデルの格納パス<br>
-デフォルト：model/birefnet_1024x1024.onnx
-* --score_th<br>
-マスク値の閾値 ※指定する場合は0.5など小数値を指定<br>
-デフォルト：None
 
-# Reference
-* [ZhengPeng7/BiRefNet](https://github.com/ZhengPeng7/BiRefNet)
-* [masamitsu-murase/deform_conv2d_onnx_exporter](https://github.com/masamitsu-murase/deform_conv2d_onnx_exporter)
+## ONNX モデルの準備
 
-# Author
-高橋かずひと(https://twitter.com/KzhtTkhs)
- 
-# License 
-BiRefNet-ONNX-Sample is under [MIT License](LICENSE).
+`app.py` は同じディレクトリにある `birefnet_1024x1024.onnx` を読み込みます。以下のいずれかで用意してください。
 
-# Note
-サンプルの画像は[ぱくたそ](https://www.pakutaso.com/)様の「[攻撃ヘリコプターアパッチ（AH-64）](https://www.pakutaso.com/20171004291ah-64-1.html)」を使用しています。
+### 方法 A: 自分で変換する（推奨）
 
+同梱の [`birefnet_Convert2ONNX.ipynb`](birefnet_Convert2ONNX.ipynb) を Google Colab で開いて上から実行すると `birefnet_1024x1024.onnx` が生成されます。生成されたファイルを本リポジトリのルートに配置してください。
+
+ノートブックの先頭セルにある `IMSIZE` を変えれば任意の解像度（例: `1344`）でも変換できます。その場合は後述のとおり `app.py` 側の `imsize` も合わせてください。
+
+### 方法 B: 既存の ONNX を持っている場合
+
+ファイル名を `birefnet_1024x1024.onnx` にして、`app.py` と同じディレクトリに置くだけで OK です。
+
+## 実行方法
+
+```bash
+python app.py
+```
+
+起動するとローカルに Gradio サーバが立ち上がり、コンソールに `http://127.0.0.1:7860` のような URL が表示されます。ブラウザでアクセスしてください。
+
+### 使い方
+
+1. **Input image** に画像をアップロード
+2. **背景の扱い** を選択
+   - `original` … 透過部分は元画像の色のまま
+   - `black` … 透過部分を黒で塗る
+   - `white` … 透過部分を白で塗る
+3. **Generate** をクリック
+
+出力は 3 つ表示されます。
+
+| 出力 | 内容 |
+|---|---|
+| Output image | 2 値マスク（前景=白、背景=黒） |
+| foreground image | 前景のみ抽出（背景は透過 / 黒 / 白） |
+| background image | 背景のみ抽出（前景は透過 / 黒 / 白） |
+
+## 解像度を変えたい場合
+
+`app.py` の末尾近くの `imsize = 1024` を、用意した ONNX のサイズに合わせて変更してください。たとえば 1344 の ONNX を使うなら:
+
+```python
+imsize = 1344
+onnx_session = load_model(imsize)
+```
+
+ONNX には入力解像度が焼き込まれているため、ファイル名の数字と `imsize` は必ず一致させる必要があります。
+
+## GPU について
+
+`app.py` は `CUDAExecutionProvider` を優先し、無ければ `CPUExecutionProvider` に自動フォールバックします。GPU で動かしたい場合は CUDA 対応版の `onnxruntime-gpu` をインストールし、対応する CUDA / cuDNN を環境にセットアップしてください。
